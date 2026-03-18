@@ -92,6 +92,7 @@ def baixar_html_selenium(url: str, wait_s: float = 6.0, scroll_passes: int = 4) 
     try:
         from selenium import webdriver
         from selenium.webdriver.chrome.options import Options
+        from selenium.common.exceptions import TimeoutException, WebDriverException
     except Exception as exc:
         raise RuntimeError(
             "Selenium não está instalado. Rode: pip install selenium webdriver-manager"
@@ -101,6 +102,10 @@ def baixar_html_selenium(url: str, wait_s: float = 6.0, scroll_passes: int = 4) 
     options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--no-first-run")
+    options.add_argument("--disable-background-networking")
     options.add_argument("--window-size=1440,2400")
     options.add_argument("--lang=pt-BR")
     options.add_argument(
@@ -108,14 +113,33 @@ def baixar_html_selenium(url: str, wait_s: float = 6.0, scroll_passes: int = 4) 
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
     )
 
-    driver = webdriver.Chrome(options=options)
     try:
+        driver = webdriver.Chrome(options=options)
+    except WebDriverException as exc:
+        raise RuntimeError(
+            "Falha ao iniciar o Chrome/Chromedriver no servidor. "
+            "Verifique se o Google Chrome/Chromium e o chromedriver estão instalados e compatíveis."
+        ) from exc
+
+    try:
+        driver.set_page_load_timeout(90)
+        driver.set_script_timeout(90)
         driver.get(url)
         time.sleep(wait_s)
         for _ in range(max(0, scroll_passes)):
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(1.5)
         return driver.page_source
+    except TimeoutException as exc:
+        raise RuntimeError(
+            "O Chrome/Chromedriver excedeu o tempo limite ao carregar a página no servidor. "
+            "Em VPS isso costuma ser falta de memória, problema em /dev/shm ou travamento do navegador headless."
+        ) from exc
+    except WebDriverException as exc:
+        raise RuntimeError(
+            "O Chrome/Chromedriver travou durante a coleta da página. "
+            "Em servidor isso normalmente indica incompatibilidade entre chrome/chromedriver ou ambiente sem recursos suficientes."
+        ) from exc
     finally:
         driver.quit()
 
